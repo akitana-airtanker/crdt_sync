@@ -13,12 +13,15 @@ import 'package:uuid/uuid.dart';
 /// and automatically sync all of the outstanding messages when it succeeds.
 Future<void> main(List<String> args) async {
   final crdt = MapCrdt(['chat']);
+  String? author;
 
-  print('Welcome to CRDT Chat.');
-  stdout.write('Your name: ');
-  final author = stdin.readLineSync()?.trim();
+  if (args.isNotEmpty) {
+    print('Welcome to CRDT Chat.');
+    stdout.write('Your name: ');
+    author = stdin.readLineSync()?.trim();
 
-  print('Hi $author. Type anything to send a message.');
+    print('Hi $author. Type anything to send a message.');
+  }
 
   String remoteAuthor = 'Unknown';
   if (args.isEmpty) {
@@ -26,7 +29,7 @@ Future<void> main(List<String> args) async {
     listen(
       crdt,
       8080,
-      handshakeDataBuilder: (_, __) => {'name': author},
+      handshakeDataBuilder: (_, __) => {'name': 'Server'},
       onConnecting: (request) => print(
           'Incoming connection from ${request.connectionInfo?.remoteAddress.address}'),
       onConnect: (crdtSync, peerData) {
@@ -52,19 +55,19 @@ Future<void> main(List<String> args) async {
           print('Disconnected from $remoteAuthor ($code $reason)'),
       // verbose: true,
     ).connect();
+
+    crdt.onTablesChanged.listen(
+      (e) {
+        final records = crdt.getChangeset(modifiedOn: e.hlc)['chat']!;
+        for (final record in records) {
+          final message = record['value'] as Map<String, dynamic>;
+          print('[${message['author']}] ${message['line']}');
+        }
+      },
+    );
+
+    // Can't use stdin.readLineSync() since it blocks the entire application
+    stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) =>
+        crdt.put('chat', Uuid().v4(), {'author': author, 'line': line}));
   }
-
-  crdt.onTablesChanged.listen(
-    (e) {
-      final records = crdt.getChangeset(modifiedOn: e.hlc)['chat']!;
-      for (final record in records) {
-        final message = record['value'] as Map<String, dynamic>;
-        print('[${message['author']}] ${message['line']}');
-      }
-    },
-  );
-
-  // Can't use stdin.readLineSync() since it blocks the entire application
-  stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) =>
-      crdt.put('chat', Uuid().v4(), {'author': author, 'line': line}));
 }
