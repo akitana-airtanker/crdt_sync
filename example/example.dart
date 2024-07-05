@@ -20,7 +20,7 @@ Future<void> main(List<String> args) async {
 
   print('Hi $author. Type anything to send a message.');
 
-  late String remoteAuthor;
+  String remoteAuthor = 'Unknown';
   if (args.isEmpty) {
     // ignore: unawaited_futures
     listen(
@@ -41,7 +41,7 @@ Future<void> main(List<String> args) async {
     // ignore: unawaited_futures
     CrdtSyncClient(
       crdt,
-      Uri.parse('ws://${args.first}'),
+      Uri.parse('wss://${args.first}'),
       handshakeDataBuilder: () => {'name': author},
       onConnecting: () => print('Connecting…'),
       onConnect: (nodeId, info) {
