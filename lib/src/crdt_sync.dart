@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:crdt/crdt.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import 'sync_socket.dart';
 
@@ -42,7 +42,7 @@ class CrdtSync {
   /// Represents the nodeId from the remote peer connected to this socket.
   String? get peerId => _peerId;
 
-  /// Takes an established [WebSocket] connection to start synchronizing the
+  /// Takes an established [IO.Socket] connection to start synchronizing the
   /// supplied [crdt] with a remote CrdtSync instance.
   ///
   /// Use [handshakeDataBuilder] to send connection metadata on the first frame.
@@ -72,7 +72,7 @@ class CrdtSync {
   /// Set [verbose] to true to spam your output with raw record payloads.
   CrdtSync.client(
     Crdt crdt,
-    WebSocketChannel webSocket, {
+    IO.Socket socket, {
     ClientHandshakeDataBuilder? handshakeDataBuilder,
     ChangesetBuilder? changesetBuilder,
     RecordValidator? validateRecord,
@@ -84,7 +84,7 @@ class CrdtSync {
     bool verbose = false,
   }) : this._(
           crdt,
-          webSocket,
+          socket,
           isClient: true,
           clientHandshakeDataBuilder: handshakeDataBuilder,
           changesetBuilder: changesetBuilder,
@@ -97,20 +97,9 @@ class CrdtSync {
           verbose: verbose,
         );
 
-  /// Takes an established [WebSocket] connection to start synchronizing with
-  /// another CrdtSync socket.
-  ///
-  /// It's recommended that the supplied [socket] has a ping interval set to
-  /// avoid stale connections. This can be done in the parent framework, e.g.
-  /// by setting [pingInterval] in shelf_web_socket's [webSocketHandler].
-  ///
-  /// Also provided are [listen] and [upgrade] as helper functions to accept new
-  /// connections, and upgrade existing ones, respectively.
-  ///
-  /// See [CrdtSync.client] for a description of the remaining parameters.
   CrdtSync.server(
     Crdt crdt,
-    WebSocketChannel webSocket, {
+    IO.Socket socket, {
     ServerHandshakeDataBuilder? handshakeDataBuilder,
     ChangesetBuilder? changesetBuilder,
     RecordValidator? validateRecord,
@@ -122,7 +111,7 @@ class CrdtSync {
     bool verbose = false,
   }) : this._(
           crdt,
-          webSocket,
+          socket,
           isClient: false,
           serverHandshakeDataBuilder: handshakeDataBuilder,
           changesetBuilder: changesetBuilder,
@@ -137,7 +126,7 @@ class CrdtSync {
 
   CrdtSync._(
     this.crdt,
-    WebSocketChannel webSocket, {
+    IO.Socket socket, {
     required this.isClient,
     this.clientHandshakeDataBuilder,
     this.serverHandshakeDataBuilder,
@@ -152,14 +141,14 @@ class CrdtSync {
   })  : changesetBuilder = changesetBuilder ?? crdt.getChangeset,
         assert((isClient && serverHandshakeDataBuilder == null) ||
             (!isClient && clientHandshakeDataBuilder == null)) {
-    _handle(webSocket);
+    _handle(socket);
   }
 
-  Future<void> _handle(WebSocketChannel webSocket) async {
+  Future<void> _handle(IO.Socket socket) async {
     StreamSubscription? localSubscription;
 
     _syncSocket = SyncSocket(
-      webSocket,
+      socket,
       crdt.nodeId,
       onDisconnect: (code, reason) {
         localSubscription?.cancel();

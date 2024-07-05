@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:crdt/crdt.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import 'crdt_sync.dart';
 
@@ -73,30 +73,40 @@ class CrdtSyncClient {
     onConnecting?.call();
 
     try {
-      final socket = WebSocketChannel.connect(uri);
-      await socket.ready;
-      _crdtSync = CrdtSync.client(
-        crdt,
-        socket,
-        handshakeDataBuilder: handshakeDataBuilder,
-        changesetBuilder: changesetBuilder,
-        validateRecord: validateRecord,
-        mapIncomingChangeset: mapIncomingChangeset,
-        onConnect: (remoteNodeId, remoteInfo) {
-          _reconnectDelay = _minDelay;
-          _setState(SocketState.connected);
-          onConnect?.call(remoteNodeId, remoteInfo);
-        },
-        onChangesetReceived: onChangesetReceived,
-        onChangesetSent: onChangesetSent,
-        onDisconnect: (remoteNodeId, code, reason) {
-          _setState(SocketState.disconnected);
-          onDisconnect?.call(remoteNodeId, code, reason);
-          _crdtSync = null;
-          _maybeReconnect();
-        },
-        verbose: verbose,
-      );
+      final socket = IO.io(uri.toString(), <String, dynamic>{
+        'transports': ['websocket'],
+      });
+
+      socket.on('connect', (_) {
+        _crdtSync = CrdtSync.client(
+          crdt,
+          socket,
+          handshakeDataBuilder: handshakeDataBuilder,
+          changesetBuilder: changesetBuilder,
+          validateRecord: validateRecord,
+          mapIncomingChangeset: mapIncomingChangeset,
+          onConnect: (remoteNodeId, remoteInfo) {
+            _reconnectDelay = _minDelay;
+            _setState(SocketState.connected);
+            onConnect?.call(remoteNodeId, remoteInfo);
+          },
+          onChangesetReceived: onChangesetReceived,
+          onChangesetSent: onChangesetSent,
+          onDisconnect: (remoteNodeId, code, reason) {
+            _setState(SocketState.disconnected);
+            onDisconnect?.call(remoteNodeId, code, reason);
+            _crdtSync = null;
+            _maybeReconnect();
+          },
+          verbose: verbose,
+        );
+      });
+
+      socket.on('connect_error', (e) {
+        _log('$e');
+        _setState(SocketState.disconnected);
+        _maybeReconnect();
+      });
     } catch (e) {
       _log('$e');
       _setState(SocketState.disconnected);

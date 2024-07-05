@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:crdt/crdt.dart';
-import 'package:web_socket_channel/io.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import 'crdt_sync.dart';
 
@@ -85,13 +85,16 @@ Future<void> upgrade(
   OnChangeset? onChangesetSent,
   bool verbose = false,
 }) async {
-  final webSocket =
-      IOWebSocketChannel(await WebSocketTransformer.upgrade(request)
-        ..pingInterval = pingInterval);
+  final webSocket = await WebSocketTransformer.upgrade(request);
+  final socket = IO.io(webSocket, <String, dynamic>{
+    'transports': ['websocket'],
+    'pingInterval': pingInterval?.inMilliseconds,
+  });
+
   late final CrdtSync crdtSync;
   crdtSync = CrdtSync.server(
     crdt,
-    webSocket,
+    socket,
     handshakeDataBuilder: handshakeDataBuilder,
     changesetBuilder: changesetBuilder,
     validateRecord: validateRecord,

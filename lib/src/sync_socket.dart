@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crdt/crdt.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 typedef Handshake = ({
   String nodeId,
@@ -11,7 +11,7 @@ typedef Handshake = ({
 });
 
 class SyncSocket {
-  final WebSocketChannel socket;
+  final IO.Socket socket;
   final void Function(int? code, String? reason) onDisconnect;
   final void Function(CrdtChangeset changeset) onChangeset;
   final bool verbose;
@@ -32,35 +32,46 @@ class SyncSocket {
     required this.onChangeset,
     required this.verbose,
   }) {
-    _subscription = socket.stream.map((e) => jsonDecode(e)).listen(
-      (message) async {
-        _log('⬇️ $message');
-        if (!_handshakeCompleter.isCompleted) {
-          // The first message is a handshake
-          _handshakeCompleter.complete((
-            nodeId: message['node_id'] as String,
-            // Modified timestamps always use the local node id
-            lastModified: Hlc.parse(message['last_modified'] as String)
-                .apply(nodeId: localNodeId),
-            data: message['data'] as Map<String, dynamic>?
-          ));
-        } else {
-          // Merge into crdt
-          final changeset = parseCrdtChangeset(message);
-          onChangeset(changeset);
+    socket.on('message', (data) async {
+      final message = jsonDecode(data);
+      _log('⬇️ $message');
+      if (!_handshakeCompleter.isCompleted) {
+        // The first message is a handshake
+        final lastModified = message['last_modified'];
+        if (lastModified == null) {
+          _log('Invalid argument(s): last_modified is null');
+          return;
         }
-      },
-      cancelOnError: true,
-      onError: (e) => _log('$e'),
-      onDone: close,
-    );
+        _handshakeCompleter.complete((
+          nodeId: message['node_id'] as String,
+          // Modified timestamps always use the local node id
+          lastModified: Hlc.parse(lastModified as String)
+              .apply(nodeId: localNodeId),
+          data: message['data'] as Map<String, dynamic>?
+        ));
+      } else if (message.containsKey('chat')) {
+        // Handle chat message
+        final changeset = parseCrdtChangeset(message);
+        _log('Processing chat message: $changeset'); // 受信したチャットメッセージのログを追加
+        onChangeset(changeset);
+      } else {
+        _log('Unknown message format: $message');
+      }
+    });
+
+    // Manually create a StreamSubscription to handle socket disconnection
+    _subscription = Stream.periodic(Duration(seconds: 1)).listen((_) {
+      if (socket.disconnected) {
+        close();
+      }
+    });
   }
 
   void _send(Map<String, Object?> data) {
     if (data.isEmpty) return;
     _log('⬆️ $data');
     try {
-      socket.sink.add(jsonEncode(data));
+      socket.emit('message', jsonEncode(data));
     } catch (e, st) {
       _log('$e\n$st');
       close(4000, '$e');
@@ -83,12 +94,12 @@ class SyncSocket {
 
   /// Close this connection
   Future<void> close([int? code, String? reason]) async {
-    await Future.wait([
+    await Future.wait<void>([
       _subscription.cancel(),
-      socket.sink.close(code, reason),
+      Future(() => socket.close()), // 非同期操作に置き換え
     ]);
 
-    onDisconnect(socket.closeCode, socket.closeReason);
+    onDisconnect(code, reason); // codeを使用
   }
 
   void _log(String msg) {

@@ -5,6 +5,7 @@ import 'package:crdt/map_crdt.dart';
 import 'package:crdt_sync/crdt_sync.dart';
 import 'package:crdt_sync/crdt_sync_server.dart';
 import 'package:uuid/uuid.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 /// This example implements a simple CLI chat app.
 ///
@@ -41,7 +42,7 @@ Future<void> main(List<String> args) async {
     // ignore: unawaited_futures
     CrdtSyncClient(
       crdt,
-      Uri.parse('ws://${args.first}'),
+      Uri.parse('https://${args.first}'),
       handshakeDataBuilder: () => {'name': author},
       onConnecting: () => print('Connecting…'),
       onConnect: (nodeId, info) {

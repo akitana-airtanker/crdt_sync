@@ -7,9 +7,9 @@ environment:
   sdk: ^3.0.0
 
 dependencies:
-  crdt: ^5.1.2
-#    path: ../crdt
-  web_socket_channel: ^2.4.0
+  crdt:
+    path: ../crdt
+  socket_io_client: ^2.0.0
 
 dev_dependencies:
   lints: any
