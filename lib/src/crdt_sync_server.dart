@@ -40,7 +40,7 @@ Future<void> listen(
   void Function(Object error, HttpRequest request)? onUpgradeError,
   bool verbose = false,
 }) async {
-  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+  final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   if (verbose) print('Listening on localhost:${server.port}');
 
   await for (HttpRequest request in server) {
